@@ -323,30 +323,40 @@ def save_switch_states():
 
 
 def load_switch_states():
+    # switch_states.json is per-machine live state (git-ignored, mutates on
+    # every slider/toggle change). switch_states.default.json is the
+    # repo-shipped starting point everyone gets on first run, before they've
+    # saved their own preferences — falling back to it here (rather than the
+    # hardcoded per-field defaults below) means a fresh clone opens with the
+    # team's intended defaults instead of the library's own.
+    path = "switch_states.json"
     try:
-        with open("switch_states.json", "r") as f:
+        with open(path, "r") as f:
             state = json.load(f)
-        modules.globals.keep_fps = state.get("keep_fps", True)
-        modules.globals.keep_audio = state.get("keep_audio", True)
-        modules.globals.keep_frames = state.get("keep_frames", False)
-        modules.globals.many_faces = state.get("many_faces", False)
-        modules.globals.map_faces = state.get("map_faces", False)
-        modules.globals.poisson_blend = state.get("poisson_blend", False)
-        modules.globals.color_correction = state.get("color_correction", False)
-        modules.globals.nsfw_filter = state.get("nsfw_filter", False)
-        modules.globals.live_mirror = state.get("live_mirror", False)
-        modules.globals.live_resizable = state.get("live_resizable", False)
-        modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
-        modules.globals.show_fps = state.get("show_fps", False)
-        # Mouth mask always starts disabled (slider at 0) on launch,
-        # regardless of the persisted value — enable it explicitly each session.
-        modules.globals.mouth_mask_size = 0.0
-        modules.globals.mouth_mask = False
-        modules.globals.show_mouth_mask_box = False
     except FileNotFoundError:
-        pass
+        try:
+            with open("switch_states.default.json", "r") as f:
+                state = json.load(f)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return
     except (OSError, json.JSONDecodeError):
-        pass
+        return
+
+    modules.globals.keep_fps = state.get("keep_fps", True)
+    modules.globals.keep_audio = state.get("keep_audio", True)
+    modules.globals.keep_frames = state.get("keep_frames", False)
+    modules.globals.many_faces = state.get("many_faces", False)
+    modules.globals.map_faces = state.get("map_faces", False)
+    modules.globals.poisson_blend = state.get("poisson_blend", False)
+    modules.globals.color_correction = state.get("color_correction", False)
+    modules.globals.nsfw_filter = state.get("nsfw_filter", False)
+    modules.globals.live_mirror = state.get("live_mirror", False)
+    modules.globals.live_resizable = state.get("live_resizable", False)
+    modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
+    modules.globals.show_fps = state.get("show_fps", False)
+    modules.globals.mouth_mask = state.get("mouth_mask", False)
+    modules.globals.show_mouth_mask_box = state.get("show_mouth_mask_box", False)
+    modules.globals.mouth_mask_size = state.get("mouth_mask_size", 0.0)
 
 
 # ─── thread-safe status bridge ───────────────────────────────────────────
@@ -659,9 +669,10 @@ class MainWindow(QMainWindow):
         self.s_sharpness.setToolTip(_("Sharpen the enhanced face output"))
         grid.addWidget(self.s_sharpness, 1, 1)
 
-        # Mouth mask — always starts at 0 (disabled) on launch
+        # Mouth mask — starts at the loaded/default mouth_mask_size (see
+        # load_switch_states), not a hardcoded value
         grid.addWidget(QLabel(_("Mouth Mask")), 2, 0)
-        self.s_mouth = slider(0.0, 100.0, 0.0, 1,
+        self.s_mouth = slider(0.0, 100.0, modules.globals.mouth_mask_size, 1,
                               self._on_mouth_mask_change)
         self.s_mouth.sliderPressed.connect(self._on_mouth_mask_pressed)
         self.s_mouth.sliderReleased.connect(self._on_mouth_mask_released)
