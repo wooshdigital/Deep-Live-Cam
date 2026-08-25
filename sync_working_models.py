@@ -17,7 +17,6 @@ real api_key. Ask di/RJ for the key rather than committing it.
 import json
 import os
 import re
-import sys
 import urllib.request
 import urllib.error
 
@@ -52,21 +51,29 @@ def download(url: str, dest_path: str):
         out.write(resp.read())
 
 
-def main():
+def sync(status=print) -> str:
+    """
+    Runs the sync and returns a one-line summary. `status` is called with
+    progress messages as it goes -- pass ui.update_status for a UI-thread
+    -safe callback, or leave as print for the CLI/launch.bat case.
+    """
     try:
         config = load_config()
     except FileNotFoundError:
-        print(f"Missing {CONFIG_PATH} -- can't sync Working Models. Skipping.")
-        return
+        msg = f"Missing {CONFIG_PATH} -- can't sync Working Models."
+        status(msg)
+        return msg
 
     api_url = config["api_url"]
     api_key = config["api_key"]
 
+    status("Syncing Working Models from Kinetix...")
     try:
         photos = fetch_photos(api_url, api_key)
     except (urllib.error.URLError, urllib.error.HTTPError, RuntimeError) as e:
-        print(f"Working Models sync failed ({e}) -- continuing without it.")
-        return
+        msg = f"Working Models sync failed ({e}) -- continuing without it."
+        status(msg)
+        return msg
 
     downloaded, skipped, failed = 0, 0, 0
     for photo in photos:
@@ -85,12 +92,14 @@ def main():
             download(photo["url"], dest_path)
             downloaded += 1
         except (urllib.error.URLError, urllib.error.HTTPError) as e:
-            print(f"  Failed to download {photo['originalFilename']}: {e}")
+            status(f"  Failed to download {photo['originalFilename']}: {e}")
             failed += 1
 
-    print(f"Working Models sync: {downloaded} new, {skipped} already present, {failed} failed. "
-          f"({len(photos)} total on Kinetix)")
+    summary = (f"Working Models sync: {downloaded} new, {skipped} already present, "
+               f"{failed} failed. ({len(photos)} total on Kinetix)")
+    status(summary)
+    return summary
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sync()

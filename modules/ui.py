@@ -24,6 +24,7 @@ import cv2
 import numpy as np
 import requests
 from PIL import Image, ImageOps
+from sync_working_models import sync as run_working_models_sync
 from PySide6.QtCore import (
     QObject,
     QThread,
@@ -370,6 +371,7 @@ class _UIBridge(QObject):
     """Single QObject that owns cross-thread signals."""
 
     statusChanged = Signal(str)
+    workingModelsSyncDone = Signal()
 
 
 def _emit_status(text: str) -> None:
@@ -545,8 +547,16 @@ class MainWindow(QMainWindow):
             _("Get a random face from thispersondoesnotexist.com")
         )
         self.btn_random_face.clicked.connect(self._on_random_face)
+        self.btn_sync_working_models = QPushButton("⬇")
+        self.btn_sync_working_models.setObjectName("secondary")
+        self.btn_sync_working_models.setFixedWidth(40)
+        self.btn_sync_working_models.setToolTip(
+            _("Sync Working Models from Kinetix now (also runs automatically on launch)")
+        )
+        self.btn_sync_working_models.clicked.connect(self._on_sync_working_models)
         src_row.addWidget(self.btn_select_source)
         src_row.addWidget(self.btn_random_face)
+        src_row.addWidget(self.btn_sync_working_models)
         src_col.addLayout(src_row)
 
         # Swap button column
@@ -809,6 +819,26 @@ class MainWindow(QMainWindow):
             self.source_label.setText("")
         except Exception as exc:
             print(f"Failed to fetch random face: {exc}")
+
+    def _on_sync_working_models(self) -> None:
+        # Runs on a background thread -- downloading ~100+ photos would
+        # otherwise freeze the UI for however long that takes. update_status
+        # is safe to call off-thread; re-enabling the button afterwards goes
+        # through the workingModelsSyncDone signal instead since touching a
+        # widget directly from a non-UI thread isn't safe.
+        self.btn_sync_working_models.setEnabled(False)
+
+        def _run():
+            try:
+                run_working_models_sync(status=update_status)
+            finally:
+                if _BRIDGE is not None:
+                    _BRIDGE.workingModelsSyncDone.emit()
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_working_models_sync_done(self) -> None:
+        self.btn_sync_working_models.setEnabled(True)
 
     def _on_swap_paths(self) -> None:
         global _RECENT_SOURCE_DIR, _RECENT_TARGET_DIR
@@ -1549,5 +1579,6 @@ def init(
 
     # Route status updates onto the UI thread regardless of caller.
     _BRIDGE.statusChanged.connect(_MAIN.set_status)
+    _BRIDGE.workingModelsSyncDone.connect(_MAIN._on_working_models_sync_done)
 
     return _Window(_APP, _MAIN)
