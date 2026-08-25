@@ -232,8 +232,12 @@ def _(text: str) -> str:
     return _LANG._(text)
 
 
-# Preserve original cwd state for file dialogs.
-_RECENT_SOURCE_DIR: Optional[str] = None
+# Preserve original cwd state for file dialogs. Source defaults to the
+# synced Working Models folder (see sync_working_models.py) so it's the
+# first thing you see when picking a face, not wherever the dialog last
+# happened to be.
+_WORKING_MODELS_DIR = "working_models"
+_RECENT_SOURCE_DIR: Optional[str] = _WORKING_MODELS_DIR if os.path.isdir(_WORKING_MODELS_DIR) else None
 _RECENT_TARGET_DIR: Optional[str] = None
 _RECENT_OUTPUT_DIR: Optional[str] = None
 
