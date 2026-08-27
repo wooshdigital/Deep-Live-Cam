@@ -107,16 +107,5 @@ cd /d "%~dp0"
 pause
 "@ | Out-File -Encoding ascii launch.bat
 
-# ---- desktop shortcut ----
-try {
-    $ws = New-Object -ComObject WScript.Shell
-    $sc = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Deep-Live-Cam.lnk'))
-    $sc.TargetPath = Join-Path $PSScriptRoot 'launch.bat'
-    $sc.WorkingDirectory = $PSScriptRoot
-    $sc.IconLocation = '%SystemRoot%\System32\imageres.dll,262'
-    $sc.Description = 'Deep-Live-Cam'
-    $sc.Save()
-} catch { Write-Host "Could not create desktop shortcut: $($_.Exception.Message)" -ForegroundColor Yellow }
-
 Step 'Done'
-Write-Host "Setup complete. Start the app from the Deep-Live-Cam desktop shortcut (provider: $provider)." -ForegroundColor Green
+Write-Host "Setup complete. Start the app with launch.bat (provider: $provider)." -ForegroundColor Green
