@@ -5,24 +5,20 @@
 # NVIDIA, DirectML otherwise), the three model files (fetched from this
 # repo's "models-v1" GitHub release), and the default config files.
 #
-# Needs: gh_token.txt next to this script (fine-grained GitHub token,
-# contents:read on wooshdigital/Deep-Live-Cam only) — the installer that
-# downloaded this repo writes it. Internet + ~5GB disk. No git required.
+# This repo is PUBLIC — no GitHub auth anywhere. The one real secret is the
+# Kinetix API key for Working-Models photo sync: the team installer writes it
+# to kinetix_key.txt (gitignored) and this script wires it into the sync
+# config. Without it everything still installs; only photo sync stays off.
+# Internet + ~5GB disk. No git required.
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
 $Repo = 'wooshdigital/Deep-Live-Cam'
 $ReleaseTag = 'models-v1'
-$TokenFile = Join-Path $PSScriptRoot 'gh_token.txt'
+$KinetixKeyFile = Join-Path $PSScriptRoot 'kinetix_key.txt'
 
 function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 function Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
-
-# ---- token ----
-if (-not (Test-Path $TokenFile)) { Fail "gh_token.txt not found next to setup.ps1 (the installer normally writes it)." }
-$Token = (Get-Content $TokenFile -Raw).Trim()
-if (-not $Token) { Fail 'gh_token.txt is empty.' }
-$Headers = @{ Authorization = "Bearer $Token"; 'X-GitHub-Api-Version' = '2022-11-28' }
 
 # ---- python 3.11 ----
 Step 'Checking Python 3.11'
@@ -70,7 +66,7 @@ if ($hasNvidia) {
 # ---- models from the GitHub release ----
 Step 'Downloading model files (~1.1GB)'
 New-Item -ItemType Directory -Force models | Out-Null
-$rel = Invoke-RestMethod -Headers $Headers -Uri "https://api.github.com/repos/$Repo/releases/tags/$ReleaseTag"
+$rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/tags/$ReleaseTag"
 foreach ($asset in $rel.assets) {
     $dest = Join-Path 'models' $asset.name
     if ((Test-Path $dest) -and ((Get-Item $dest).Length -eq $asset.size)) {
@@ -78,9 +74,7 @@ foreach ($asset in $rel.assets) {
         continue
     }
     Write-Host "  $($asset.name) ($([math]::Round($asset.size/1MB)) MB)..."
-    # Asset download needs the octet-stream accept header on private repos.
-    $h = $Headers.Clone(); $h['Accept'] = 'application/octet-stream'
-    Invoke-WebRequest -Headers $h -Uri "https://api.github.com/repos/$Repo/releases/assets/$($asset.id)" -OutFile $dest
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest
     if ((Get-Item $dest).Length -ne $asset.size) { Fail "$($asset.name): size mismatch after download." }
 }
 
@@ -89,8 +83,19 @@ Step 'Applying default config'
 if ((Test-Path 'switch_states.default.json') -and -not (Test-Path 'switch_states.json')) {
     Copy-Item switch_states.default.json switch_states.json
 }
-if ((Test-Path 'working_models_sync_config.example.json') -and -not (Test-Path 'working_models_sync_config.json')) {
+# Working-Models photo sync: wire in the real Kinetix key when the installer
+# provided one; otherwise fall back to the example (sync disabled until the
+# key is filled in by hand).
+if (Test-Path $KinetixKeyFile) {
+    $kkey = (Get-Content $KinetixKeyFile -Raw).Trim()
+    if ($kkey) {
+        @{ api_url = 'https://kinetix.roochedigital.com/api'; api_key = $kkey } |
+            ConvertTo-Json | Out-File -Encoding ascii working_models_sync_config.json
+        Write-Host 'Kinetix photo sync configured.'
+    }
+} elseif (-not (Test-Path 'working_models_sync_config.json')) {
     Copy-Item working_models_sync_config.example.json working_models_sync_config.json
+    Write-Host 'NOTE: no Kinetix key provided - photo sync stays off until the key is set.' -ForegroundColor Yellow
 }
 
 # ---- launch.bat for this PC's provider ----

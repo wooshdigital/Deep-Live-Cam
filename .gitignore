@@ -31,4 +31,4 @@ working_models_sync_config.json
 install.bat
 /.claude
 *.bat
-gh_token.txt
+kinetix_key.txt
