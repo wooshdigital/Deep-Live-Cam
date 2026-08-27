@@ -1,3 +1,35 @@
+# Rooche team install (read this first)
+
+**To install on a work PC:** open [tools.roochedigital.com](https://tools.roochedigital.com) →
+**Deep-Live-Cam** → download the installer zip → extract → double-click
+`install-deep-live-cam.bat`. That's the whole install. (~5GB disk, takes a while
+on first run.)
+
+**How it works** — the installer:
+1. downloads this repo (no git or GitHub account needed),
+2. runs `setup.bat` → `setup.ps1`, which creates a Python 3.11 venv, installs
+   dependencies, and auto-picks the right engine for the PC's GPU
+   (CUDA on NVIDIA, DirectML otherwise),
+3. downloads the three AI model files (~1.1GB) from this repo's
+   [`models-v1` release](../../releases/tag/models-v1),
+4. wires up the **Working-Models photo sync**: the installer from the tools
+   portal carries the internal Kinetix API key (that's why the installer itself
+   is only distributed there, never committed here — this repo is public), so
+   every launch pulls the current Working Models photos from Kinetix
+   automatically. Whoever Business Ops adds in Kinetix shows up for everyone at
+   next launch.
+5. writes a `launch.bat` for the detected GPU — **start the app with
+   `launch.bat`** from then on.
+
+Re-running the installer on a PC that already has it just re-runs setup
+(safe — it skips models that are already there).
+
+Maintainers: `setup.ps1` is the setup logic; the installer `.bat` lives outside
+git (it embeds the key) — rebuild it from a teammate's copy or the CET build if
+lost. New model versions = publish a new release tag and bump `$ReleaseTag`.
+
+---
+
 <h1 align="center">Deep-Live-Cam 2.1.6</h1>
 
 <p align="center">
