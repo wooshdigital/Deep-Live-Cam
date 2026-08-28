@@ -94,7 +94,13 @@ except Exception as e:
         # real GPU acceleration -- just via DX12 instead of CUDA.
         Write-Host 'CUDA runtime incomplete (cuDNN/CUDA libs missing) - switching to DirectML.'
         & $pip uninstall -y onnxruntime-gpu
-        & $pip install onnxruntime-directml==1.24.4
+        # --force-reinstall because onnxruntime-gpu and onnxruntime-directml share
+        # the same site-packages/onnxruntime/ directory. Uninstalling the gpu
+        # wheel deletes those shared files, and if a directml wheel was ever
+        # installed before, pip then reports "already satisfied" and restores
+        # nothing -- leaving an onnxruntime package with no InferenceSession at
+        # all, which fails at import with `providers: []`.
+        & $pip install --force-reinstall onnxruntime-directml==1.24.4
         if ($LASTEXITCODE -ne 0) { Fail 'Could not install onnxruntime-directml.' }
         $provider = 'dml'
     }
@@ -103,7 +109,8 @@ except Exception as e:
     # onnxruntime-gpu, which is useless without CUDA - replace with DirectML.
     Write-Host 'No NVIDIA GPU - switching to onnxruntime-directml.'
     & $pip uninstall -y onnxruntime-gpu
-    & $pip install onnxruntime-directml==1.24.4
+    # --force-reinstall for the same shared-directory reason as above.
+    & $pip install --force-reinstall onnxruntime-directml==1.24.4
     if ($LASTEXITCODE -ne 0) { Fail 'Could not install onnxruntime-directml.' }
     $provider = 'dml'
 }
