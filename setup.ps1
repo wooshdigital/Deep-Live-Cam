@@ -100,7 +100,12 @@ except Exception as e:
         # installed before, pip then reports "already satisfied" and restores
         # nothing -- leaving an onnxruntime package with no InferenceSession at
         # all, which fails at import with `providers: []`.
-        & $pip install --force-reinstall onnxruntime-directml==1.24.4
+        #
+        # --no-deps is REQUIRED alongside it: without it, --force-reinstall also
+        # re-resolves onnxruntime's dependencies and happily pulls numpy 2.x and
+        # protobuf 7.x, blowing past the `numpy<2` and `protobuf==4.25.1` pins in
+        # requirements.txt that insightface, opencv and tensorflow depend on.
+        & $pip install --force-reinstall --no-deps onnxruntime-directml==1.24.4
         if ($LASTEXITCODE -ne 0) { Fail 'Could not install onnxruntime-directml.' }
         $provider = 'dml'
     }
@@ -110,7 +115,7 @@ except Exception as e:
     Write-Host 'No NVIDIA GPU - switching to onnxruntime-directml.'
     & $pip uninstall -y onnxruntime-gpu
     # --force-reinstall for the same shared-directory reason as above.
-    & $pip install --force-reinstall onnxruntime-directml==1.24.4
+    & $pip install --force-reinstall --no-deps onnxruntime-directml==1.24.4
     if ($LASTEXITCODE -ne 0) { Fail 'Could not install onnxruntime-directml.' }
     $provider = 'dml'
 }
