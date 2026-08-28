@@ -1028,7 +1028,21 @@ class PreviewWindow(QWidget):
         if not (modules.globals.source_path and modules.globals.target_path):
             return
         update_status("Processing...")
-        temp_frame = get_video_frame(modules.globals.target_path, frame_number)
+        # An image target must be read with imread, not get_video_frame. Sending
+        # a still through VideoCapture fails twice over: FFMPEG cannot decode it
+        # ("Could not find decoder for codec_id=..."), then OpenCV falls back to
+        # its image-SEQUENCE reader, which rewrites the last run of digits in the
+        # name into a printf pattern -- "bc362f04_working.png" becomes
+        # "bc%03df04_working.png" -- and reports a missing file that was never
+        # missing. The frame comes back None and face detection dies on
+        # `NoneType has no attribute 'shape'`.
+        if is_image(modules.globals.target_path):
+            temp_frame = imread_unicode(modules.globals.target_path)
+        else:
+            temp_frame = get_video_frame(modules.globals.target_path, frame_number)
+        if temp_frame is None:
+            update_status("Could not read the target - check the file is a valid image or video.")
+            return
         if modules.globals.nsfw_filter and check_and_ignore_nsfw(temp_frame):
             return
         from modules.processors.frame.core import get_frame_processors_modules as _gfpm

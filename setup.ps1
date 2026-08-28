@@ -51,8 +51,45 @@ Step 'Detecting GPU'
 $hasNvidia = $false
 try { & nvidia-smi *> $null; if ($LASTEXITCODE -eq 0) { $hasNvidia = $true } } catch {}
 if ($hasNvidia) {
-    Write-Host 'NVIDIA GPU found - keeping onnxruntime-gpu (CUDA).'
-    $provider = 'cuda'
+    # nvidia-smi only proves a DRIVER is present. onnxruntime-gpu additionally
+    # needs the CUDA 12 runtime and cuDNN 9 DLLs, which are NOT bundled with the
+    # wheel and are absent on a machine without the CUDA toolkit. Without them
+    # onnxruntime logs "cudnn64_9.dll is missing" and silently falls back to
+    # CPUExecutionProvider -- the app still runs, just many times slower, while
+    # launch.bat claims "provider: cuda". Silent and slow is the worst outcome,
+    # so prove CUDA actually loads before trusting it.
+    Write-Host 'NVIDIA GPU found - verifying CUDA runtime...'
+    $probe = @'
+import sys
+try:
+    import numpy as np, onnx, onnxruntime as ort
+    from onnx import helper, TensorProto
+    t = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1])
+    g = helper.make_graph([helper.make_node("Identity", ["x"], ["y"])], "p", [t],
+                          [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1])])
+    m = helper.make_model(g, opset_imports=[helper.make_opsetid("", 13)])
+    so = ort.SessionOptions(); so.log_severity_level = 4
+    s = ort.InferenceSession(m.SerializeToString(), so, providers=["CUDAExecutionProvider"])
+    print("OK" if "CUDAExecutionProvider" in s.get_providers() else "FALLBACK")
+except Exception as e:
+    print("FALLBACK")
+'@
+    $probeFile = Join-Path $env:TEMP 'dlc_cuda_probe.py'
+    Set-Content -Path $probeFile -Value $probe -Encoding UTF8
+    $cudaOk = (& '.\venv\Scripts\python.exe' $probeFile 2>$null | Select-Object -Last 1)
+    Remove-Item $probeFile -ErrorAction SilentlyContinue
+    if ($cudaOk -eq 'OK') {
+        Write-Host 'CUDA runtime OK - keeping onnxruntime-gpu.'
+        $provider = 'cuda'
+    } else {
+        # DirectML works on NVIDIA too and needs no toolkit, so this still gives
+        # real GPU acceleration -- just via DX12 instead of CUDA.
+        Write-Host 'CUDA runtime incomplete (cuDNN/CUDA libs missing) - switching to DirectML.'
+        & $pip uninstall -y onnxruntime-gpu
+        & $pip install onnxruntime-directml==1.24.4
+        if ($LASTEXITCODE -ne 0) { Fail 'Could not install onnxruntime-directml.' }
+        $provider = 'dml'
+    }
 } else {
     # Same swap the original working install used: requirements pins
     # onnxruntime-gpu, which is useless without CUDA - replace with DirectML.
