@@ -76,7 +76,15 @@ except Exception as e:
 '@
     $probeFile = Join-Path $env:TEMP 'dlc_cuda_probe.py'
     Set-Content -Path $probeFile -Value $probe -Encoding UTF8
-    $cudaOk = (& '.\venv\Scripts\python.exe' $probeFile 2>$null | Select-Object -Last 1)
+    # Run through cmd, not directly. When CUDA is missing, onnxruntime prints a
+    # long "cudnn64_9.dll is missing" error on stderr from native C++ code, and
+    # PowerShell 5.1 turns every stderr line from a native exe into a
+    # NativeCommandError record even with `2>$null` -- so a probe that worked
+    # perfectly looked like the installer had blown up. `cmd /c ... 2>NUL`
+    # discards it before PowerShell ever sees it.
+    $venvPy = Join-Path (Get-Location) 'venv\Scripts\python.exe'
+    $cudaOk = (cmd /c "`"$venvPy`" `"$probeFile`" 2>NUL" | Select-Object -Last 1)
+    $global:LASTEXITCODE = 0
     Remove-Item $probeFile -ErrorAction SilentlyContinue
     if ($cudaOk -eq 'OK') {
         Write-Host 'CUDA runtime OK - keeping onnxruntime-gpu.'
