@@ -237,8 +237,27 @@ def _(text: str) -> str:
 # synced Working Models folder (see sync_working_models.py) so it's the
 # first thing you see when picking a face, not wherever the dialog last
 # happened to be.
-_WORKING_MODELS_DIR = "working_models"
-_RECENT_SOURCE_DIR: Optional[str] = _WORKING_MODELS_DIR if os.path.isdir(_WORKING_MODELS_DIR) else None
+#
+# The path MUST be absolute. Windows' native file dialog silently ignores a
+# relative directory and falls back to its own most-recently-used folder, which
+# is how the picker kept opening in the Google Drive share even on machines
+# where the sync had run and working_models/ was full. Anchor it on this file's
+# location rather than the cwd, so it also survives being launched by something
+# that doesn't cd into the app directory first (run-directml.bat, a shortcut).
+_APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_WORKING_MODELS_DIR = os.path.join(_APP_ROOT, "working_models")
+
+
+def _default_source_dir() -> Optional[str]:
+    """Working Models folder if it exists, else None (let the dialog decide).
+
+    Checked on every open, not once at import: the sync may create the folder
+    after the app has started.
+    """
+    return _WORKING_MODELS_DIR if os.path.isdir(_WORKING_MODELS_DIR) else None
+
+
+_RECENT_SOURCE_DIR: Optional[str] = _default_source_dir()
 _RECENT_TARGET_DIR: Optional[str] = None
 _RECENT_OUTPUT_DIR: Optional[str] = None
 
@@ -758,7 +777,7 @@ class MainWindow(QMainWindow):
             _PREVIEW.hide()
         path, _filter = QFileDialog.getOpenFileName(
             self, _("select an source image"),
-            _RECENT_SOURCE_DIR or "",
+            _RECENT_SOURCE_DIR or _default_source_dir() or "",
             "Images (*.png *.jpg *.jpeg *.gif *.bmp)",
         )
         if path and is_image(path):
@@ -1392,7 +1411,7 @@ class MapperDialog(QDialog):
     def _select_source(self, row: int) -> None:
         path, _f = QFileDialog.getOpenFileName(
             self, _("select an source image"),
-            _RECENT_SOURCE_DIR or "",
+            _RECENT_SOURCE_DIR or _default_source_dir() or "",
             "Images (*.png *.jpg *.jpeg *.gif *.bmp)",
         )
         if not path:
@@ -1497,7 +1516,7 @@ class LiveMapperDialog(QDialog):
     def _select_face(self, row: int, kind: str) -> None:
         path, _f = QFileDialog.getOpenFileName(
             self, _("select an source image"),
-            _RECENT_SOURCE_DIR or "",
+            _RECENT_SOURCE_DIR or _default_source_dir() or "",
             "Images (*.png *.jpg *.jpeg *.gif *.bmp)",
         )
         if not path:
