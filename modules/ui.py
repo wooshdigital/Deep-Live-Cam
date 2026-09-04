@@ -1289,9 +1289,18 @@ class WebcamPreviewWindow(QWidget):
         self._image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self._image_label, 1)
 
+        # Initialise every attribute closeEvent touches BEFORE the camera can
+        # fail, otherwise a failed start returns early and the auto-close fires
+        # closeEvent against attributes that were never assigned (crashes with
+        # AttributeError: no attribute '_stop_event' when the webcam won't open).
+        self._stop_event = threading.Event()
+        self._capture_worker = None
+        self._processing_worker = None
+        self._timer = None
+
         self._cap = VideoCapturer(camera_index)
         if not self._cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
-            update_status("Failed to start camera")
+            update_status("Camera not available — is it in use by another app, or is the right camera selected?")
             QTimer.singleShot(0, self.close)
             return
 
@@ -1303,7 +1312,6 @@ class WebcamPreviewWindow(QWidget):
 
         self._capture_queue: queue.Queue = queue.Queue(maxsize=2)
         self._processed_queue: queue.Queue = queue.Queue(maxsize=2)
-        self._stop_event = threading.Event()
 
         self._capture_worker = _CaptureWorker(
             self._cap, self._capture_queue, self._stop_event
@@ -1334,10 +1342,13 @@ class WebcamPreviewWindow(QWidget):
     def closeEvent(self, event) -> None:
         self._stop_event.set()
         try:
-            self._timer.stop()
+            if self._timer is not None:
+                self._timer.stop()
         except Exception:
             pass
         for worker in (self._capture_worker, self._processing_worker):
+            if worker is None:
+                continue
             try:
                 worker.wait(2000)
             except Exception:
