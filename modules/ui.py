@@ -257,6 +257,34 @@ def _default_source_dir() -> Optional[str]:
     return _WORKING_MODELS_DIR if os.path.isdir(_WORKING_MODELS_DIR) else None
 
 
+def _remember_source_dir(path: str) -> None:
+    """Record the folder a source image was picked from, for next time —
+    but ONLY if it is still inside Working Models.
+
+    Bug this fixes: _RECENT_SOURCE_DIR previously remembered whatever folder
+    was picked from, unconditionally. The very first pick from anywhere else
+    (a Drive share, Downloads, a USB stick — one stray browse, ever) then
+    outranked the Working Models default for every dialog open for the rest
+    of the running process, since the picker prefers _RECENT_SOURCE_DIR over
+    _default_source_dir(). Restricting what gets remembered to Working
+    Models itself keeps the convenience (switching between subfolders in
+    there stays sticky) without ever being able to wander off and get stuck
+    outside it.
+    """
+    global _RECENT_SOURCE_DIR
+    folder = os.path.dirname(path)
+    try:
+        inside_working_models = os.path.commonpath(
+            [os.path.abspath(folder), _WORKING_MODELS_DIR]
+        ) == _WORKING_MODELS_DIR
+    except ValueError:
+        # Different drives on Windows (e.g. G:\\ vs C:\\) raise here — that is
+        # itself a clear "not inside Working Models".
+        inside_working_models = False
+    if inside_working_models:
+        _RECENT_SOURCE_DIR = folder
+
+
 _RECENT_SOURCE_DIR: Optional[str] = _default_source_dir()
 _RECENT_TARGET_DIR: Optional[str] = None
 _RECENT_OUTPUT_DIR: Optional[str] = None
@@ -782,7 +810,7 @@ class MainWindow(QMainWindow):
         )
         if path and is_image(path):
             modules.globals.source_path = path
-            _RECENT_SOURCE_DIR = os.path.dirname(path)
+            _remember_source_dir(path)
             self.source_label.setPixmap(render_image_preview(path, (200, 200)))
             self.source_label.setText("")
         elif not path:
@@ -860,13 +888,13 @@ class MainWindow(QMainWindow):
         self.btn_sync_working_models.setEnabled(True)
 
     def _on_swap_paths(self) -> None:
-        global _RECENT_SOURCE_DIR, _RECENT_TARGET_DIR
+        global _RECENT_TARGET_DIR
         sp = modules.globals.source_path
         tp = modules.globals.target_path
         if not (sp and tp and is_image(sp) and is_image(tp)):
             return
         modules.globals.source_path, modules.globals.target_path = tp, sp
-        _RECENT_SOURCE_DIR = os.path.dirname(tp)
+        _remember_source_dir(tp)
         _RECENT_TARGET_DIR = os.path.dirname(sp)
         if _PREVIEW is not None:
             _PREVIEW.hide()
@@ -1416,6 +1444,7 @@ class MapperDialog(QDialog):
         )
         if not path:
             return
+        _remember_source_dir(path)
         cv2_img = imread_unicode(path)
         face = get_one_face(cv2_img)
         if face is None:
@@ -1521,6 +1550,7 @@ class LiveMapperDialog(QDialog):
         )
         if not path:
             return
+        _remember_source_dir(path)
         cv2_img = imread_unicode(path)
         face = get_one_face(cv2_img)
         if face is None:
