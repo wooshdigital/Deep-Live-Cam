@@ -32,3 +32,5 @@ install.bat
 /.claude
 *.bat
 kinetix_key.txt
+# hand-distributed installer - carries the Kinetix key, never commit
+install-deep-live-cam.bat
