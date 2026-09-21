@@ -38,7 +38,11 @@ def load_config():
 
 
 def safe_path_component(name: str) -> str:
-    return re.sub(r'[^a-zA-Z0-9._ -]', '_', name).strip() or "unnamed"
+    # Windows silently drops trailing dots and spaces from a path component
+    # ("Jose Jr." is created as "Jose Jr"). If we keep them, the path we
+    # expect never equals the path on disk, and _prune() deletes that photo
+    # on every run. Strip them here so expected == actual.
+    return re.sub(r'[^a-zA-Z0-9._ -]', '_', name).strip().rstrip('. ') or "unnamed"
 
 
 def fetch_photos(api_url: str, api_key: str):
@@ -130,13 +134,18 @@ def _prune(expected_paths: set, status) -> int:
     if not os.path.isdir(OUTPUT_DIR):
         return 0
 
+    # Compare normalised paths: Windows is case-insensitive and may report a
+    # different separator or casing than we joined with. A false mismatch
+    # here is a deleted photo, so be strict about equality, not about text.
+    expected_norm = {os.path.normcase(os.path.normpath(p)) for p in expected_paths}
+
     removed = 0
     for root, _dirs, files in os.walk(OUTPUT_DIR):
         for filename in files:
             if not _MANAGED_FILENAME.match(filename):
                 continue
             full_path = os.path.join(root, filename)
-            if full_path not in expected_paths:
+            if os.path.normcase(os.path.normpath(full_path)) not in expected_norm:
                 try:
                     os.remove(full_path)
                     removed += 1
